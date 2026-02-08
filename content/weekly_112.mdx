@@ -1,0 +1,33 @@
+---
+title: Week in Feb 07, 2026
+date: 2026-02-07
+tags: ['Weekly']
+description: '本周使用 Beautiful-Mermaid 对博客图表进行了优化。听了一期关于 GEO 的播客，读了一篇关于 AI Coding 的文章。'
+---
+
+## Dev
+
++ [Beautiful-Mermaid](https://github.com/lukilabs/beautiful-mermaid)
++ [DeepWiki MCP](https://docs.devin.ai/work-with-devin/deepwiki-mcp)
++ [Building Bulletproof React Components](https://shud.in/thoughts/build-bulletproof-react-components)
+
+一个专注于生成高颜值 Mermaid 图表的渲染库。 本周我使用它重构了博客的图表渲染模块。与原版 Mermaid 相比，它在服务端生成 SVG/PNG 的体验更加流畅，且支持多种主题配置。对于追求文档美观度的开发者来说，是一个非常棒的替代方案。
+
+Devin 团队推出的 DeepWiki MCP，其核心价值在于极大地释放了 GitHub 仓库作为知识源的潜力。 该 MCP Server 通过三个主要工具，让 AI Agent 能够像人类开发者一样“阅读”和“理解”项目文档：
+
+  - read_wiki_structure：获取 GitHub 仓库的文档主题列表，建立全局索引；
+
+  - read_wiki_contents：深入读取具体的文档内容，获取细节；
+
+  - ask_question：就 GitHub 仓库提出任意问题，并获得结合上下文的 AI 解答。 这意味着 AI 不再是基于训练数据的模糊回忆，而是能够实时连接到 GitHub，进行有据可依的准确回答。
+
+关于构建 React 组件的深度指南。文章跳出了基础语法的范畴，深入探讨了防御性编程在前端组件设计中的应用。从 API 的直观性、错误边界（Error Boundaries）的合理设置，到边缘情况（Edge Cases）的优雅降级，它提供了一套完整的思维框架，帮助开发者写出既易于维护又难以被“用坏”的健壮组件。
+
+## 播客
+
++ [从 Clawdbot 到 26 年 AI Coding 主题大爆发｜对谈 PingCAP CTO 东旭](https://www.xiaoyuzhoufm.com/episode/698563a188663289fe80769a)
++ [AEO/GEO 线下讨论：流量逻辑在变，内容价值如何被重新定义？](https://podwise.ai/dashboard/episodes/7012281)
+
+## 文章
+
++ [品味 + 工程思维：AI 时代最难被替代的两件事](https://baoyu.io/blog/2026/02/03/taste-engineering-thinking)
