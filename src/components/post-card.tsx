@@ -18,7 +18,7 @@ export const PostCard = ({
         rounded-2xl border border-fd-border
         bg-fd-card text-fd-card-foreground
         transition-all duration-300 ease-out
-        hover:shadow-lg hover:border-fd-primary/30 hover:-translate-y-1
+        hover:shadow-lg hover:-translate-y-1
       ">
         <div>
           <div className="mb-4 flex items-center justify-between">
