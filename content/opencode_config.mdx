@@ -1,0 +1,70 @@
+---
+title: OpenCode 实践分享
+date: 2026-03-05
+tags: ['AI']
+description: '本周对团队内部，做了 OpenCode 的实践分享，同时看了 OpenCode Agent 系统架构部分的源码。'
+---
+## 开始之前
+1. 提出问题时是不是**可验证**的[^1]
+
+| 模糊提问（不可验证） | 明确提问（可验证） |
+| :--- | :--- |
+| "让页面看起来更好看" | 粘贴截图，实现这个设计。对结果进行截图并与原始设计进行比较。列出差异并修复 |
+| "实现一个验证电子邮件的函数" | 编写一个 validateEmail 函数。示例测试用例： user@example.com 为真， user@.com 为假。实现后运行测试 |
+
+
+2. 有没有先进行**规划**，再开始写代码
+3. 提出的问题有没有提供具体的**上下文**
+
+## 配置
+OpenCode 官方配置文档[^2]
+### Agents
+#### primary
++ plan
++ build
+
+#### subgent
++ general
++ explore
++ refactorer
++ code-reviewer
++ docs-writer
++ security-auditor
+
+### Commands
++ commit
++ verify-changes
++ review
+
+### Skills
++ find-skills
++ infographic-creator
+
+### Plugins
++ plannotator
+
+## Agents VS Commands VS Skills
+| 概念 | 核心定位 |
+| :--- | :--- |
+| **Agents** | 我是谁，我能做什么（角色） |
+| **Commands** | 要做什么，按什么步骤做（任务） |
+| **Skills** | 如何做某事，领域知识与方法论（能力） |
+
+
+### code review
+| 审查视角 | Agent 负责什么 | Command 负责什么 | Skill 提供什么 |
+| :--- | :--- | :--- | :--- |
+| **安全审查** | 提供安全知识（SQL注入、XSS等） | 定义检查清单（输入验证、敏感数据处理） | 安全模式识别方法（如 Security-Audit Skill） |
+| **性能审查** | 提供性能模式识别能力 | 定义分析步骤（算法复杂度、查询效率） | 性能分析框架（如 Optimizing-Performance Skill） |
+| **输出格式** | 定义问题详情模板 | 定义严重度分类标准 | 代码质量评估方法论（如 Analyzing-Projects Skill） |
+| **整体评估** | 提供技术判断 | 生成决策建议 | 架构一致性检查（如 Designing-Architecture Skill） |
+
+
+## 业务实践
++ 使用 docs-writer agent  生成项目概览
++ 使用 @refactor agent 将项目重构为 tailwind css 架构
++ 使用 plannotator 对规划的内容进行反馈
++ 使用 infographic-creator skills  生成稳定美观，不同风格的信息图
+
+[^1]: [Best Practices for Claude Code](https://code.claude.com/docs/en/best-practices)
+[^2]: [OpenCode Config](https://opencode.ai/docs/config/)
