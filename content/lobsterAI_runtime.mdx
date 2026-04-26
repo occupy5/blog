@@ -1,0 +1,493 @@
+---
+title: LobsterAI 运行时集成架构与原理
+date: 2026-04-25 12:00:21
+tags: ['读源码', 'AI']
+description: ''
+---
+
+## 1. OpenClaw 运行时集成原理
+### 1.1 总体分层
+LobsterAI 采用**产品能力层（Cowork）与执行引擎层（Engine Runtime）分离**的架构。Cowork 负责会话、消息、权限、状态流转等业务语义；OpenClaw 作为 Cowork 的可插拔执行引擎之一，负责实际的 AI Agent 推理和工具执行。
+
+![](https://blog-assets.shenn.xyz/runtime-layered-architecture.png)
+
+核心设计原则：**GUI 永远消费 Cowork 标准事件，不感知底层是哪个引擎**。引擎生命周期管理走独立的 `openclaw:engine:*` 通道，会话业务走引擎无关的 `cowork:*` 通道。
+
+### 1.2 引擎生命周期管理：OpenClawEngineManager
+`OpenClawEngineManager`（`src/main/libs/openclawEngineManager.ts:145`）管理 OpenClaw Gateway 进程的完整生命周期，与 Session 管理完全分离。
+
+#### 状态机
+
+![](https://blog-assets.shenn.xyz/engine-lifecycle-state-machine.png)
+
+各阶段含义：
+
+| Phase | 含义 | 触发条件 |
+| --- | --- | --- |
+| `not_installed` | Runtime 目录不存在 | `resolveRuntimeMetadata()` 返回 `root: null` |
+| `ready` | Runtime 已就绪，Gateway 未启动 | `ensureReady()` 成功 |
+| `starting` | Gateway 进程已 spawn，等待健康检查 | `startGateway()` → `doStartGateway()` |
+| `running` | Gateway 健康检查通过 | HTTP/TCP 探测成功 |
+| `error` | 启动失败、进程崩溃、超时 | 各种错误场景 |
+
+
+#### 启动流程
+
+
+`doStartGateway()`（`openclawEngineManager.ts:338`）的核心步骤：
+
+1. `ensureReady()` — 验证 runtime 目录存在、同步本地扩展
+2. 检查已有进程是否健康（避免重复启动）
+3. 解析 runtime 路径和入口文件
+4. 生成 Gateway Token（`ensureGatewayToken()`）
+5. 解析可用端口（`resolveGatewayPort()`）
+6. 设置状态为 `starting`
+7. **Spawn Gateway 进程**：
+    - macOS/Linux: `utilityProcess.fork()` — Electron 的隔离进程
+    - Windows: `child_process.spawn()` with `ELECTRON_RUN_AS_NODE=1`
+8. `waitForGatewayReady()` — 600ms 间隔轮询，最长 300s，探测 4 个 HTTP 端点 + TCP 端口
+9. 成功 → `running`；失败 → `error`
+
+#### 健康检查
+`waitForGatewayReady()`（`openclawEngineManager.ts:1230`）每 600ms 循环探测：
+
++ HTTP: `/health`, `/healthz`, `/ready`, `/`
++ TCP: 端口是否可达
++ 进度上报: 10% → 90%
++ 超时阈值: `GATEWAY_BOOT_TIMEOUT_MS = 300,000ms`（5 分钟）
+
+#### 自动重启
+Gateway 异常退出时（`attachGatewayExitHandlers`, `openclawEngineManager.ts:1394`）：
+
++ 最多 5 次重启尝试
++ 延迟梯度: 3s → 5s → 10s → 20s → 30s
++ 设置 `canRetry: true` 供 UI 展示
+
+#### Runtime 发现
+打包模式下 runtime 位于 `Resources/cfmmind`，开发模式下位于 `vendor/openclaw-runtime/current`。版本号从 `package.json` 的 `openclaw.version` 字段读取。
+
+### 1.3 配置同步：OpenClawConfigSync
+`OpenClawConfigSync`（`src/main/libs/openclawConfigSync.ts`）将 LobsterAI 的业务配置翻译为 OpenClaw Gateway 需要的 `openclaw.json` 格式。
+
+#### 映射关系
+| LobsterAI 配置 | OpenClaw 配置 |
+| --- | --- |
+| LLM API providers (baseUrl, apiKey, models) | `models.providers` — mode=replace |
+| `executionMode: auto/local/sandbox` | `agents.defaults.sandbox.mode: non-main/off/all` |
+| `workingDirectory` | `agents.defaults.workspace` |
+| Skills (SKILLs/ 目录) | `skills.enabled`, `skills.load.extraDirs` |
+| IM 平台配置 (WeChat/DingTalk/Feishu 等) | `channels.<platform>` — 多实例以 `accounts` 方式 |
+| 系统提示词 | `AGENTS.md` 文件写入 workspace |
+| 各 Agent 定义 | `agents.list` |
+
+
+#### 安全机制
+所有敏感值（API Key、Token）使用 `${VAR}` 占位符存储在配置文件中，绝不以明文写入磁盘。实际值通过 `collectSecretEnvVars()` 收集后注入 Gateway 进程环境变量（`engineManager.setSecretEnvVars()`）。
+
+#### 写入方式
+配置变更时对比新旧内容，仅内容变化时写入。使用原子写入模式（tmp + rename），避免半写状态。
+
+### 1.4 Bootstrap 序列
+应用启动时（`main.ts:5217`），按以下顺序执行：
+
+1. 启动 MCP Bridge HTTP Server
+2. 同步 OpenClaw 配置（`syncOpenClawConfig({ reason: 'startup' })`)
+3. `ensureOpenClawRunningForCowork()` — 检查 Gateway 阶段，若未运行则触发完整 bootstrap
+
+`ensureOpenClawRunningForCowork()`（`main.ts:890`）在每次 Session 开始前也会被调用，确保引擎可用。
+
+---
+
+## 2. 运行时路由与运行时适配器原理
+### 2.1 核心接口：CoworkRuntime
+`CoworkRuntime`（`src/main/libs/agentEngine/types.ts:61-79`）是所有引擎适配器必须实现的统一契约：
+
+```typescript
+export interface CoworkRuntime {
+  on<U extends keyof CoworkRuntimeEvents>(event: U, listener: CoworkRuntimeEvents[U]): this;
+  off<U extends keyof CoworkRuntimeEvents>(event: U, listener: CoworkRuntimeEvents[U]): this;
+  startSession(sessionId: string, prompt: string, options?: CoworkStartOptions): Promise<void>;
+  continueSession(sessionId: string, prompt: string, options?: CoworkContinueOptions): Promise<void>;
+  patchSession?(sessionId: string, patch: OpenClawSessionPatch): Promise<void>;  // 可选
+  stopSession(sessionId: string): void;
+  stopAllSessions(): void;
+  respondToPermission(requestId: string, result: PermissionResult): void;
+  isSessionActive(sessionId: string): boolean;
+  getSessionConfirmationMode(sessionId: string): 'modal' | 'text' | null;
+  onSessionDeleted?(sessionId: string): void;  // 可选
+}
+```
+
+**关键设计特征**：
+
++ **事件驱动**：适配器通过 6 个 `CoworkRuntimeEvents` 向上推送流式数据，而非返回 Promise/回调
++ **可选方法**：`patchSession` 和 `onSessionDeleted` 标记为可选（`?`），承认不同引擎能力集不同
++ **无生命周期方法**：没有 `install()`、`start()`、`stop()` 等进程管理方法——这些由独立的 EngineManager 负责
+
+#### 6 个标准事件（CoworkRuntimeEvents）
+```typescript
+export interface CoworkRuntimeEvents {
+  message: (sessionId: string, message: CoworkMessage) => void;
+  messageUpdate: (sessionId: string, messageId: string, content: string) => void;
+  permissionRequest: (sessionId: string, request: PermissionRequest) => void;
+  complete: (sessionId: string, claudeSessionId: string | null) => void;
+  error: (sessionId: string, error: string) => void;
+  sessionStopped: (sessionId: string, ) => void;
+}
+```
+
+这 6 个事件构成了引擎到 UI 的完整数据流，**每个适配器必须 emit 全部 6 个事件**。
+
+### 2.2 运行时路由器：CoworkEngineRouter
+
+![](https://blog-assets.shenn.xyz/request-delegation-chain.png)
+
+`CoworkEngineRouter`（`src/main/libs/agentEngine/coworkEngineRouter.ts:19`）是核心路由层，**本身实现了 **`CoworkRuntime`** 接口**，但将所有操作委托给具体的 runtime 适配器。
+
+#### 当前依赖结构
+```typescript
+type RouterDeps = {
+  getCurrentEngine: () => CoworkAgentEngine;  // 读取当前引擎配置
+  openclawRuntime: CoworkRuntime;             // 单一 runtime 实例
+};
+```
+
+初始化过程（`main.ts:1329-1332`）：
+
+```typescript
+coworkEngineRouter = new CoworkEngineRouter({
+  getCurrentEngine: resolveCoworkAgentEngine,  // 从 SQLite 读 agentEngine 配置
+  openclawRuntime: openClawRuntimeAdapter,     // 唯一的适配器实例
+});
+```
+
+#### 路由机制
+虽然当前只有一个引擎，Router 已经内置了**多引擎路由的基础设施**：
+
+| 内部状态 | 类型 | 用途 |
+| --- | --- | --- |
+| `sessionEngine` | `Map<string, CoworkAgentEngine>` | 记录每个 session 运行在哪个引擎上 |
+| `requestEngine` | `Map<string, CoworkAgentEngine>` | 记录每个权限请求来自哪个引擎 |
+| `requestSession` | `Map<string, string>` | 权限请求 ID → session ID 映射 |
+| `currentEngine` | `CoworkAgentEngine` | 当前激活的引擎标识 |
+
+
+#### 请求委托链路
+Session 请求的完整链路：
+
+```plain
+用户输入 → Renderer Redux
+  → coworkService.startSession()
+  → IPC invoke 'cowork:session:start'
+  → main.ts handler: ensureOpenClawRunningForCowork()
+  → getCoworkEngineRouter().startSession()
+  → router: safeResolveEngine() → 选择 runtime
+  → runtime.startSession()
+```
+
+#### 引擎切换处理
+`handleEngineConfigChanged()`（`coworkEngineRouter.ts:124`）：
+
+```typescript
+handleEngineConfigChanged(nextEngine: CoworkAgentEngine): void {
+  if (nextEngine === this.currentEngine) return;
+  this.currentEngine = nextEngine;
+  // 停止所有活跃 session
+  const activeSessionIds = Array.from(this.sessionEngine.keys())
+    .filter(sessionId => this.runtime.isSessionActive(sessionId));
+  this.stopAllSessions();
+  // 向每个被中断的 session 发送 ENGINE_SWITCHED 错误
+  activeSessionIds.forEach(sessionId => {
+    this.emit('error', sessionId, ENGINE_SWITCHED_CODE);
+  });
+}
+```
+
+当用户在 Settings 中更改 `agentEngine` 时，`cowork:config:set` handler 检测到变化，调用此方法中断所有活跃会话。
+
+#### 事件转发：bindRuntimeEvents
+`bindRuntimeEvents()`（`coworkEngineRouter.ts:139`）订阅底层 runtime 的全部 6 个事件，并重新发射到 Router 层：
+
+```typescript
+private bindRuntimeEvents(engine: CoworkAgentEngine, runtime: CoworkRuntime): void {
+  runtime.on('message', (sessionId, message) => {
+    this.sessionEngine.set(sessionId, engine);  // 自动标记引擎归属
+    this.emit('message', sessionId, message);
+  });
+  runtime.on('permissionRequest', (sessionId, request) => {
+    this.sessionEngine.set(sessionId, engine);
+    this.requestEngine.set(request.requestId, engine);  // 权限请求也标记引擎
+    this.requestSession.set(request.requestId, sessionId);
+    this.emit('permissionRequest', sessionId, request);
+  });
+  // ... 其余 4 个事件类似
+}
+```
+
+#### 权限请求路由
+`respondToPermission()`（`coworkEngineRouter.ts:96`）通过 `requestEngine` map 将权限响应路由到正确的引擎：
+
+```typescript
+respondToPermission(requestId: string, result: PermissionResult): void {
+  const engine = this.requestEngine.get(requestId);
+  if (engine) {
+    this.runtime.respondToPermission(requestId, result);
+    // 清理 map
+    return;
+  }
+  this.runtime.respondToPermission(requestId, result);
+}
+```
+
+### 2.3 IPC 事件转发：bindCoworkRuntimeForwarder
+`bindCoworkRuntimeForwarder()`（`main.ts:1224`）订阅 Router 的 6 个事件，转发到所有 BrowserWindow：
+
+| Router Event | IPC Channel | Payload |
+| --- | --- | --- |
+| `message` | `cowork:stream:message` | `{ sessionId, message }` |
+| `messageUpdate` | `cowork:stream:messageUpdate` | `{ sessionId, messageId, content }` |
+| `permissionRequest` | `cowork:stream:permission` | `{ sessionId, request }` (仅 modal 模式) |
+| `complete` | `cowork:stream:complete` | `{ sessionId, claudeSessionId }` |
+| `error` | `cowork:stream:error` | `{ sessionId, error }` |
+
+
+该转发器是**引擎无关的**——它只关心 Router emit 的事件，不关心底层是哪个引擎产生的。
+
+### 2.4 OpenClaw 适配器细节
+`OpenClawRuntimeAdapter`（`src/main/libs/agentEngine/openclawRuntimeAdapter.ts:601`）是 `CoworkRuntime` 的完整实现，约 4265 行。核心架构如下：
+
+#### Gateway 连接管理
+`ensureGatewayClientReady()`（行 ~1460）：
+
+1. 调用 `engineManager.startGateway()` 确保 Gateway 进程运行
+2. 获取 `GatewayConnectionInfo`（url, token, version, clientEntryPath）
+3. 动态加载 `GatewayClient` 模块（`loadGatewayClientCtor()`）
+4. 创建 WebSocket 客户端，注册事件处理器
+5. 等待 handshake 完成（`gatewayReadyPromise`）
+6. 使用序列化锁 (`gatewayClientInitLock`) 防止并发初始化
+
+#### Session 执行核心
+`runTurn()`（行 ~1200）是 session 执行的核心：
+
+1. 确保 Gateway 客户端就绪
+2. 创建 `ActiveTurn` 状态追踪对象
+3. 发送 `chat.send` RPC 到 Gateway
+4. 等待 turn 完成 Promise
+5. 处理流式 delta/final 事件，emit `messageUpdate` / `message`
+
+#### Gateway 事件处理
+`handleGatewayEvent()` 接收 WebSocket 事件并分类处理：
+
++ `tick` → 心跳看门狗更新
++ `chat` → 文本流式输出 → `messageUpdate` / `complete`
++ `agent` → 工具使用事件 → 新消息 `message` / `messageUpdate`
++ `exec.approval.requested` → 权限请求 → `permissionRequest`
+
+#### 流式文本合并
+适配器实现了 `mergeStreamingText()` 算法，处理 OpenClaw Gateway 的 snapshot vs delta 流式模式，通过 suffix-prefix 重叠检测合并连续的文本片段。这是 **OpenClaw 协议特有的逻辑**，各引擎适配器需自行实现适合其协议的流式处理。
+
+#### 自动重连与看门狗
++ `GATEWAY_RECONNECT_DELAYS = [2s, 5s, 10s, 15s, 30s]`，最多 10 次重连
++ `TICK_WATCHDOG_INTERVAL_MS = 60,000`（每 60s 检查心跳）
++ `TICK_TIMEOUT_MS = 90,000`（3 个 30s tick 未响应即判定 Gateway 死亡，触发重连）
+
+---
+
+## 3. 如何实现多个运行时切换
+### 3.1 多引擎改造方案
+#### 步骤一：集中化引擎类型常量
+创建 `src/shared/engine/constants.ts`（main 和 renderer 共享的常量模块）：
+
+```typescript
+export const CoworkAgentEngine = {
+  OpenClaw: 'openclaw',
+  OpenCode: 'opencode',
+  Hermes: 'hermes',
+} as const;
+export type CoworkAgentEngine = typeof CoworkAgentEngine[keyof typeof CoworkAgentEngine];
+
+export const EngineErrorCode = {
+  EngineSwitched: 'ENGINE_SWITCHED',
+  EngineNotReady: 'ENGINE_NOT_READY',
+} as const;
+
+export const CoworkStreamIpcChannel = {
+  Message: 'cowork:stream:message',
+  MessageUpdate: 'cowork:stream:messageUpdate',
+  Permission: 'cowork:stream:permission',
+  PermissionDismiss: 'cowork:stream:permissionDismiss',
+  Complete: 'cowork:stream:complete',
+  Error: 'cowork:stream:error',
+  SessionsChanged: 'cowork:sessions:changed',
+} as const;
+
+export const EngineLifecycleIpcChannel = {
+  getStatus: (engine: CoworkAgentEngine) => `${engine}:engine:getStatus`,
+  install: (engine: CoworkAgentEngine) => `${engine}:engine:install`,
+  retryInstall: (engine: CoworkAgentEngine) => `${engine}:engine:retryInstall`,
+  restartGateway: (engine: CoworkAgentEngine) => `${engine}:engine:restartGateway`,
+  onProgress: (engine: CoworkAgentEngine) => `${engine}:engine:onProgress`,
+} as const;
+```
+
+消除 3 处 `CoworkAgentEngine` 重复定义，统一导入。IPC 通道名也从裸字符串改为常量引用，遵循 `src/scheduledTask/constants.ts` 的 `as const` 模式。
+
+#### 步骤二：移除归一化锁
+| 文件 | 改动 |
+| --- | --- |
+| `coworkStore.ts:362-364` | `normalizeCoworkAgentEngineValue()` 改为验证值是否在 `CoworkAgentEngine` 类型范围内，合法则返回，否则 fallback 到 `CoworkAgentEngine.OpenClaw` |
+| `coworkStore.ts:360` | `COWORK_AGENT_ENGINE` → 引用 `CoworkAgentEngine.OpenClaw` |
+| `main.ts:3441-3443` | config handler 使用集中化常量验证，保留合法值 |
+
+
+#### 步骤三：Router 改为 Runtime Registry 模式
+将 `RouterDeps` 从单一 runtime 改为注册表：
+
+```typescript
+type RouterDeps = {
+  getCurrentEngine: () => CoworkAgentEngine;
+  runtimes: Map<CoworkAgentEngine, CoworkRuntime>;
+};
+
+// Router 内部委托查找
+class CoworkEngineRouter extends EventEmitter implements CoworkRuntime {
+  private getRuntimeForEngine(engine: CoworkAgentEngine): CoworkRuntime {
+    const runtime = this.deps.runtimes.get(engine);
+    if (!runtime) throw new Error(`Engine "${engine}" not available`);
+    return runtime;
+  }
+
+  private getRuntimeForSession(sessionId: string): CoworkRuntime {
+    const engine = this.sessionEngine.get(sessionId) ?? this.getCurrentEngine();
+    return this.getRuntimeForEngine(engine);
+  }
+}
+```
+
+关键改动点：
+
+1. `startSession`**/**`continueSession`：使用 `getRuntimeForSession()` 替代 `this.runtime`
+2. `stopSession`**/**`respondToPermission`：根据 `sessionEngine`/`requestEngine` 查找对应 runtime
+3. `bindRuntimeEvents()`：为注册表中的每个 runtime 绑定事件监听
+4. `handleEngineConfigChanged()`：只停止旧引擎上的 session，而非全部
+5. `safeResolveEngine()`：从 runtimes registry 查找，不再硬编码 fallback
+6. **支持并发多引擎**：不同 session 可同时运行在不同引擎上（`sessionEngine` map 已为此设计）
+
+#### 步骤四：定义通用引擎生命周期接口
+每个引擎需要自己的 lifecycle manager，统一接口为：
+
+```typescript
+interface AgentEngineManager {
+  getStatus(): AgentEngineStatus;
+  ensureReady(): Promise<AgentEngineStatus>;
+  start(): Promise<AgentEngineStatus>;
+  stop(): Promise<void>;
+  restart(): Promise<AgentEngineStatus>;
+  isRunning(): boolean;
+}
+
+interface AgentEngineStatus {
+  phase: EnginePhase;
+  version: string | null;
+  progressPercent?: number;
+  message?: string;
+  canRetry: boolean;
+}
+```
+
+`OpenClawEngineManager` 适配此接口。每个新引擎各自实现。可以用 `Map<CoworkAgentEngine, AgentEngineManager>` registry 存储。
+
+#### 步骤五：新增引擎适配器
+以 OpenCode 为例，实现三个组件：
+
+**1) OpenCodeRuntimeAdapter** — 实现 `CoworkRuntime`
+
+```typescript
+class OpenCodeRuntimeAdapter extends EventEmitter implements CoworkRuntime {
+  // 通信方式取决于 opencode 的接口：
+  // - CLI stdin/stdout JSON-RPC → child_process + JSON parsing
+  // - HTTP API → fetch + SSE streaming
+  // - WebSocket → 与 OpenClaw 类似的 GatewayClient 模式
+
+  startSession(sessionId, prompt, options?) { ... }
+  continueSession(sessionId, prompt, options?) { ... }
+  stopSession(sessionId) { ... }
+  stopAllSessions() { ... }
+  respondToPermission(requestId, result) { ... }
+  isSessionActive(sessionId) { ... }
+  getSessionConfirmationMode(sessionId) { ... }
+  // 注意: patchSession 和 onSessionDeleted 可以不实现（可选）
+}
+```
+
+**2) OpenCodeEngineManager** — 实现 `AgentEngineManager`
+
+管理 opencode 的安装与进程生命周期：发现/下载 runtime，spawn 进程，健康检查，自动重启。
+
+**3) OpenCodeConfigSync**
+
+将 LobsterAI 的 cowork config 转换为 opencode 的配置格式，写入其配置文件位置。
+
+#### 步骤六：注册到 Router
+在 `main.ts` bootstrap 中构建注册表：
+
+```typescript
+const runtimes = new Map<CoworkAgentEngine, CoworkRuntime>();
+runtimes.set(CoworkAgentEngine.OpenClaw, openClawRuntimeAdapter);
+runtimes.set(CoworkAgentEngine.OpenCode, openCodeRuntimeAdapter);
+runtimes.set(CoworkAgentEngine.Hermes, hermesRuntimeAdapter);
+
+const engineManagers = new Map<CoworkAgentEngine, AgentEngineManager>();
+engineManagers.set(CoworkAgentEngine.OpenClaw, openClawEngineManager);
+engineManagers.set(CoworkAgentEngine.OpenCode, openCodeEngineManager);
+engineManagers.set(CoworkAgentEngine.Hermes, hermesEngineManager);
+
+coworkEngineRouter = new CoworkEngineRouter({
+  getCurrentEngine: resolveCoworkAgentEngine,
+  runtimes,
+});
+```
+
+#### 步骤七：IPC 通道泛化
+**引擎生命周期 IPC**：从硬编码 `openclaw:engine:*` 改为动态 `${engine}:engine:*`：
+
+```typescript
+// preload.ts 暴露泛化方法
+openclaw: {
+  engine: {
+    getStatus: () => ipcRenderer.invoke(EngineLifecycleIpcChannel.getStatus(CoworkAgentEngine.OpenClaw)),
+    // ...
+  }
+},
+engine: {
+  getStatus: (name: CoworkAgentEngine) => ipcRenderer.invoke(EngineLifecycleIpcChannel.getStatus(name)),
+  install: (name: CoworkAgentEngine) => ipcRenderer.invoke(EngineLifecycleIpcChannel.install(name)),
+  restart: (name: CoworkAgentEngine) => ipcRenderer.invoke(EngineLifecycleIpcChannel.restartGateway(name)),
+  onProgress: (name: CoworkAgentEngine, callback) => ...,
+}
+```
+
+**Session IPC**（`cowork:*`）保持不变——Router 内部处理引擎选择，对 IPC handler 完全透明。
+
+#### 步骤八：Renderer UI 支持
++ **引擎选择**：Settings 中 `agentEngine` 从固定值变为下拉菜单，选项来自 `CoworkAgentEngine` 常量对象
++ **引擎状态面板**：每个引擎显示独立状态指示器（phase、version、健康），替代当前单一的 OpenClaw 面板
++ **引擎可用性检测**：Session 开始前调用 `engineManagers.get(currentEngine).isRunning()`，未运行则触发 bootstrap 或提示
+---
+
+## 源码文件
+| 文件 | 角色 |
+| --- | --- |
+| `src/main/libs/agentEngine/types.ts` | 核心接口定义：`CoworkRuntime`, `CoworkRuntimeEvents`, `CoworkAgentEngine` |
+| `src/main/libs/agentEngine/coworkEngineRouter.ts` | 路由层：委托到具体 runtime，per-session/per-request 引擎追踪 |
+| `src/main/libs/agentEngine/openclawRuntimeAdapter.ts` | OpenClaw 适配器：4265 行，WebSocket Gateway 客户端，流式处理 |
+| `src/main/libs/openclawEngineManager.ts` | OpenClaw 引擎生命周期：进程 spawn、健康检查、自动重启 |
+| `src/main/libs/openclawConfigSync.ts` | OpenClaw 配置同步：business config → openclaw.json |
+| `src/main/main.ts` | 主进程入口：IPC handlers、bootstrap、forwarder |
+| `src/main/preload.ts` | contextBridge 暴露引擎相关 IPC 方法 |
+| `src/main/coworkStore.ts` | SQLite 存储：`cowork_config` 表含 `agentEngine`，归一化逻辑 |
+| `src/renderer/types/cowork.ts` | Renderer 侧引擎类型定义 |
+| `src/renderer/store/slices/coworkSlice.ts` | Redux 状态：config.agentEngine |
+| `src/renderer/services/cowork.ts` | Renderer 服务层：引擎操作 IPC 调用 |
+| `src/scheduledTask/constants.ts` | `as const` 模式的参考范例 |
+
