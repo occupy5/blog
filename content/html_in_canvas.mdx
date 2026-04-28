@@ -4,28 +4,28 @@ date: 2026-04-26 12:00:21
 tags: ['前端']
 description: 'Web 提案：让 HTML 元素无缝融入 Canvas，兼具 DOM 语义排版与 Canvas 渲染控制力'
 ---
-## Demo
-+ [arrival-space](https://arrival.space/htmlcanvas)
-+ [html-in-canvas-cracks](https://felixturner.github.io/html-in-canvas-cracks/)
+**提案链接：** [HTML in Canvas](https://github.com/WICG/html-in-canvas)
 
-## 解决了哪些问题
+## 背景
 Web 开发者在处理 Canvas 内容时长期面临一个尴尬的现实：Canvas 擅长像素级操作，但对 HTML 的布局能力一无所知。这导致了几个核心问题：
 
-**可访问性的缺失** - 当你用 Canvas 绘制复杂的文本或 UI 时，屏幕阅读器可能无能为力。传统的 fallback 内容往往与实际渲染内容不同步，开发者需要手动维护两套内容。
+* **可访问性的缺失**：当你用 Canvas 绘制复杂的文本或 UI 时，屏幕阅读器可能无能为力。传统的 fallback 内容往往与实际渲染内容不同步，开发者需要手动维护两套内容。
+* **国际化噩梦**：Canvas 没有内置的文本排版引擎。从右到左（RTL）的文本、垂直书写模式、多语言混排、表情符号，这些在 HTML 中现成的功能在 Canvas 里都需要从零实现。
+* **性能与质量的权衡**：许多应用选择用 Canvas 渲染 UI 以获得高性能，但不得不牺牲文本渲染的质量和交互性；或者用 DOM 渲染获得完美体验，但付出性能代价。
+* **无法组合现代 Web 技术**：你想在 WebGL 场景中显示精美的 HTML UI？想在 3D 立方体上贴上动态的 HTML 内容？现有的组合方式要么性能低下，要么实现极其复杂。
+* **媒体导出困难**：想将网页中的某个 HTML 区域导出为图片或视频？没有标准 API，开发者只能依赖各种 hack 或第三方库。
 
-**国际化噩梦** - Canvas 没有内置的文本排版引擎。从右到左（RTL）的文本、垂直书写模式、多语言混排、表情符号，这些在 HTML 中现成的功能在 Canvas 里都需要从零实现。
+## 核心提案介绍
+为了解决上述问题，社区提出了 HTML-in-Canvas 提案。它通过三个核心原语——`layoutsubtree` 属性、`drawElementImage` 方法和 `paint` 事件——**让 HTML 元素可以无缝地渲染到 2D 或 3D Canvas 中，同时保留其完整的语义和交互能力。**
 
-**性能与质量的权衡** - 许多应用选择用 Canvas 渲染 UI 以获得高性能，但不得不牺牲文本渲染的质量和交互性。或者用 DOM 渲染获得完美体验，但付出性能代价。
+核心思想是：**让浏览器同时处理 HTML 布局和 Canvas 渲染，并保持两者同步**。
 
-**无法组合现代 Web 技术** - 你想在 WebGL 场景中显示精美的 HTML UI？想在 3D 立方体上贴上动态的 HTML 内容？抱歉，现有的组合方式要么性能低下，要么实现极其复杂。
+## Demo 与使用场景
+你可以通过以下 Demo 直观感受它的能力：
+* [Arrival Space](https://arrival.space/htmlcanvas)
+* [html-in-canvas-cracks](https://felixturner.github.io/html-in-canvas-cracks/)
 
-**媒体导出困难** - 想将网页中的某个 HTML 区域导出为图片或视频？没有标准 API，开发者只能依赖各种 hack 或第三方库。
-
-
-
-这个提案通过三个核心原语——`layoutsubtree` 属性、`drawElementImage` 方法和 `paint` 事件——让 HTML 元素可以无缝地渲染到 2D 或 3D Canvas 中，同时保留其完整的语义和交互能力。
-
-## 使用场景
+**使用场景：**
 ### 1. **图表与数据可视化**
 现在你可以直接用 HTML 编写这些元素，利用完整的 CSS 样式和排版能力，然后将其绘制到 Canvas 中。
 
@@ -44,182 +44,56 @@ WebGL 和 WebGPU 应用需要将文本、图标等 2D 元素贴到 3D 表面上�
 ### 6. **WebGPU 高级效果**
 基于光线步进（ray-marching）的果冻滑块示例展示了如何将 HTML 文本集成到复杂的着色器效果中，这是传统方法无法实现的。
 
-## 工作原理
-HTML-in-Canvas 的核心思想是：**让浏览器同时处理 HTML 布局和 Canvas 渲染，并保持两者同步**。
+## 工作原理与 API 设计
+这个提案遵循了渐进增强、上下文无关（支持 2D/WebGL/WebGPU）和事件驱动的原则。核心实现依赖以下几点：
 
-### 1. `layoutsubtree` 属性
+### 1) `layoutsubtree` 属性
 ```html
 <canvas layoutsubtree>
   <div id="content">这是要绘制的 HTML 内容</div>
 </canvas>
-
 ```
+这个属性告诉浏览器：Canvas 的直接子元素应该参与正常的 DOM 布局流程（包括盒模型、点击测试等）。它们在视觉上是“隐藏”的，但布局信息会被保留。
 
-这个属性告诉浏览器：Canvas 的直接子元素应该参与正常的 DOM 布局流程，包括盒模型、层叠上下文、点击测试等。这些元素在视觉上是"隐藏"的（不在页面渲染树中），但它们的布局信息会被保留。
-
-### 2. `drawElementImage` 方法
+### 2) `drawElementImage` 方法与 DOM 同步
 ```javascript
 const ctx = canvas.getContext('2d');
+// 绘制元素并获取变换矩阵
 const transform = ctx.drawElementImage(element, x, y, width, height);
+// 同步 DOM 位置，确保点击测试和无障碍功能正常
+element.style.transform = transform.toString(); 
 ```
+这个方法将元素绘制到 Canvas 中。关键点在于：元素的 CSS 样式会被完整保留，同时返回的变换矩阵可以直接用于同步 DOM 位置。
 
-这个方法将元素绘制到 Canvas 中，并返回一个变换矩阵。关键点：
-
-+ 元素的 CSS 样式（包括复杂文本布局、渐变、阴影等）会被完整保留
-+ 绘制时应用 Canvas 当前变换矩阵（CTM）
-+ 内容会被裁剪到元素的边框盒
-+ 返回的变换矩阵可以用于同步 DOM 位置，确保点击测试和无障碍功能正常工作
-
-### 3. `paint` 事件与 `requestPaint`
+### 3) `paint` 事件驱动
 ```javascript
 canvas.onpaint = (event) => {
-  // 重新绘制变化的内容
+  // 当 Canvas 子元素的渲染发生变化时自动触发
   ctx.reset();
   ctx.drawElementImage(element, 0, 0);
 };
-
-canvas.requestPaint(); // 手动触发绘制
+canvas.requestPaint(); // 对于动画场景，可手动触发绘制
 ```
 
-当 Canvas 子元素的渲染发生变化时，`paint` 事件会自动触发。对于需要每帧更新的场景（如动画），可以调用 `requestPaint()` 强制触发绘制。
+### 4) WebGL / OffscreenCanvas 支持
+* **3D 场景**：可以通过 `gl.texElementImage2D` 将 HTML 内容直接渲染为纹理，映射到 3D 物体上。
+* **Worker 线程**：支持通过 `captureElementImage` 结合 `OffscreenCanvas` 在后台线程进行高性能渲染。
 
-### 4. DOM 到 Canvas 变换同步
-为了让点击测试、Intersection Observer 和无障碍功能正常工作，元素在 DOM 中的位置需要与在 Canvas 中绘制的位置保持一致。
+## 当前存在的挑战
+尽管提案已在 Chromium 中实现（需通过 `chrome://flags/#canvas-draw-flag` 启用），但走向生产环境仍需解决以下问题：
 
-`drawElementImage` 返回的变换矩阵可以直接应用到 `element.style.transform`：
-
-```javascript
-const transform = ctx.drawElementImage(element, x, y);
-element.style.transform = transform.toString();
-```
-
-这个变换考虑了：
-
-+ Canvas 的当前变换矩阵（CTM）
-+ 绘制位置和尺寸
-+ CSS 像素到 Canvas Grid 像素的缩放
-+ 元素的 transform-origin
-
-### 5. WebGL/WebGPU 集成
-对于 3D 上下文，提供专门的方法：
-
-```javascript
-// WebGL
-gl.texElementImage2D(target, level, internalFormat, format, type, element);
-
-// WebGPU
-// 通过 copyElementImageToTexture 将元素复制到纹理
-```
-
-HTML 内容被直接渲染到纹理，然后映射到旋转的立方体上。
-
-### 6. OffscreenCanvas 支持
-为了利用 Worker 线程的性能优势，可以使用 `captureElementImage`：
-
-```javascript
-// 主线程
-const elementImage = canvas.captureElementImage(element);
-worker.postMessage({ elementImage }, [elementImage]);
-
-// Worker 线程
-const transform = offscreenCtx.drawElementImage(elementImage, x, y);
-```
-
-## 源码解读
-### 核心 API 设计
-完整的 IDL 定义：
-
-```plain
-partial interface HTMLCanvasElement {
-  [CEReactions, Reflect] attribute boolean layoutSubtree;
-  attribute EventHandler onpaint;
-  void requestPaint();
-  ElementImage captureElementImage(Element element);
-  DOMMatrix getElementTransform((Element or ElementImage) element, DOMMatrix drawTransform);
-};
-
-interface mixin CanvasDrawElementImage {
-  DOMMatrix drawElementImage((Element or ElementImage) element, ...);
-};
-
-CanvasRenderingContext2D includes CanvasDrawElementImage;
-```
-
-这个设计遵循了几个重要原则：
-
-1. **渐进增强** - 通过属性而不是全新的元素来扩展功能，保持向后兼容
-2. **上下文无关** - `drawElementImage` 是混入（mixin），可以在 2D、WebGL、WebGPU 上下文中使用
-3. **事件驱动** - 使用 `onpaint` 事件而非轮询，性能更好
-
-### 示例实现细节
-**文本输入示例**：展示了标准模式：
-
-```javascript
-canvas.onpaint = (event) => {
-  ctx.reset(); // 清除并重置变换
-  const transform = ctx.drawElementImage(draw_element, x, y);
-  draw_element.style.transform = transform.toString(); // 同步位置
-};
-```
-
-**饼图示例**：展示了如何与 Canvas 绘图结合：
-
-```javascript
-// 1. 用 Canvas API 绘制扇区
-const path = new Path2D();
-path.arc(0, 0, radius, angle, angle + slice);
-ctx.fill(path);
-
-// 2. 用 drawElementImage 绘制标签
-const transform = ctx.drawElementImage(label, x, y);
-label.style.transform = transform;
-
-// 3. 用 Canvas API 绘制焦点环
-if (document.activeElement === label)
-  ctx.drawFocusIfNeeded(path, document.activeElement);
-```
-
-## 还存在哪些问题
-尽管这个提案已经相当成熟（已在 Chromium 中实现并通过 flag 启用），但仍有一些挑战和未解决的问题：
-
-### 1. **浏览器支持有限**
-目前只有 Chromium 支持，且需要手动启用 `chrome://flags/#canvas-draw-flag`。Firefox、Safari 尚未表态。没有跨浏览器的一致实现，开发者很难在生产环境使用。
-
-### 2. **性能考量未完全明确**
-虽然理论上 Worker 模式应该更快，但实际的性能基准测试还不足。以下问题需要答案：
-
-+ 复杂 DOM 树的 `captureElementImage` 有多昂贵？
-+ 在高帧率动画中频繁同步变换是否会导致抖动？
-+ 与传统的文本绘制 API 相比，性能如何？
-
-### 3. **隐私与安全边界**
-HTML-in-Canvas 可能被用于"截屏"攻击，恶意网站可以捕获用户输入或敏感内容。提案提到了"隐私保护绘制"，但具体的安全模型还在讨论中。
-
-### 4. **复合层管理**
-Canvas 中的 HTML 元素如果包含复杂的 CSS 效果（如 backdrop-filter、混合模式），如何正确处理复合？这需要浏览器引擎的深度集成。
-
-### 5. **可访问性工具的适配**
-虽然语义元素会被保留，但屏幕阅读器等辅助技术需要理解"这个元素同时在 DOM 中和 Canvas 中"的状态。需要 ARIA 规范的相应更新。
-
-### 6. **开发者体验的优化**
-目前的 API 需要开发者手动管理变换同步。虽然这是为了保证最大灵活性，但对于简单的用例可能过于复杂。未来可能需要更简化的 API，如自动同步模式。
-
-### 7. **测试与调试**
-如何在开发者工具中调试 Canvas 中的 HTML 元素？现有的 DOM Inspector 需要扩展，或者需要新的调试面板。
-
-### 8. **与现有技术的协调**
-如何与现有的 HTML Canvas API（如 `measureText`）、SVG `<foreignObject>`、以及 CSS Houdini 等技术共存？需要明确的使用场景划分。
-
----
+1.  **浏览器支持有限**：目前仅 Chromium 实验性支持，Firefox、Safari 尚未表态。
+2.  **性能考量未完全明确**：高帧率动画中频繁同步变换是否会导致抖动？复杂 DOM 树的捕获成本有多高？还需要更多基准测试。
+3.  **隐私与安全边界**：可能被用于“截屏”攻击，具体的安全模型仍在讨论中。
+4.  **复合层管理**：涉及复杂 CSS 效果（如混合模式）时，需要浏览器引擎更深度的集成。
+5.  **可访问性工具适配**：屏幕阅读器等辅助技术需要更新规范，以理解“元素同时在 DOM 和 Canvas 中”的状态。
 
 ## 总结
-HTML-in-Canvas 是一个有望改变 Web 图形开发范式的提案。它巧妙地解决了长期存在的"Canvas vs DOM"对立问题，让开发者可以"既要又要"——既享受 Canvas 的渲染控制力和性能，又保留 HTML 的语义、可访问性和排版能力。
+HTML-in-Canvas 是一个有望改变 Web 图形开发范式的提案。它巧妙地解决了长期存在的“Canvas vs DOM”对立问题，让开发者可以“既要又要”——既享受 Canvas 的渲染控制力和性能，又保留 HTML 的语义、可访问性和排版能力。
 
-核心价值在于**组合性**：这不是让 Canvas 重新实现 HTML，也不是让 HTML 变得像 Canvas，而是让两者无缝协作。这种设计哲学与 Web 的开放性本质一脉相承。
-
-随着浏览器厂商的更多支持、性能基准测试的完善、以及开发者社区的反馈，这个技术有潜力成为现代 Web 应用的基础设施之一。对于游戏引擎、图表库、创意编码工具等领域，这是一个值得密切关注的方向。
+这绝不是让 Canvas 重新实现 HTML，而是让两者无缝协作，其**组合性**的价值与 Web 的开放本质一脉相承。对于游戏引擎、图表库、创意编码工具等领域，这是一个值得密切关注的基础设施级方向。
 
 ---
+* 视频版本：【HTML in Canvas — 下一代 Web 图形开发范式？-哔哩哔哩】 [https://b23.tv/Js1KDKp](https://b23.tv/Js1KDKp)
 
-视频版本：【HTML in Canvas — 下一代 Web 图形开发范式？-哔哩哔哩】 [https://b23.tv/Js1KDKp](https://b23.tv/Js1KDKp)
 
