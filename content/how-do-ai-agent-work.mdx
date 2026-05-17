@@ -1,0 +1,308 @@
+---
+title: AI Agent 是如何工作的？
+date: 2026-05-17
+tags: ['AI']
+description: '最近开发 Agent 过程中的一些思考：Agent 本质上是 LLM + 工具 + 状态 + 循环的约束系统。本期从工程视角拆解核心逻辑与踩坑经验。'
+---
+
+**AI agent** 是一种程序：它使用 AI 模型来决定下一步做什么，然后通过工具执行操作，观察结果，重复这个过程直到完成目标。
+
+## 与普通聊天机器人的区别
+
+普通的聊天机器人大致是这样的流程：
+
+<Mermaid chart={`
+sequenceDiagram
+    participant U as 用户
+    participant AI as AI 模型
+    U->>AI: 提问
+    AI-->>U: 生成回复
+`} />
+
+而 agent 更像是这样：
+
+<Mermaid chart={`
+sequenceDiagram
+    participant U as 用户
+    participant LLM as LLM 推理引擎
+    participant Tool as 外部工具
+    participant State as 状态存储
+
+    U->>LLM: 设定目标
+    loop 执行循环
+        LLM->>LLM: 思考下一步
+        LLM->>Tool: 调用工具
+        Tool-->>LLM: 返回结果
+        LLM->>State: 更新状态
+        LLM->>LLM: 评估是否完成
+    end
+    LLM-->>U: 最终答案
+`} />
+
+核心区别在于**自主性（agency）**：AI 不只是在生成文本；它控制着一个循环，可以调用函数、检查输出、更新状态，并朝着任务目标持续推进。
+
+## AI Agent 的基本构成
+
+对开发者来说，最简单的思维模型是：
+
+```text
+AI agent = LLM + 工具 + 状态 + 循环
+```
+
+其中：
+
+```text
+LLM   = 推理/决策引擎
+工具  = 它可以调用的函数
+状态  = 它目前所知的信息
+循环  = 反复执行：观察 -> 决策 -> 行动
+```
+
+## 实际场景对比
+
+假设用户说：
+
+> "帮我找到下周五去上海的最便宜航班，把最优结果发邮件给我。"
+
+<Tabs items={['普通聊天机器人', 'AI Agent']}>
+<Tab>
+
+> "这里有一些寻找便宜机票的建议。"
+
+仅生成文本建议，无法执行任何实际操作。
+
+</Tab>
+<Tab>
+
+1. 搜索航班 API
+2. 比较价格
+3. 检查日期
+4. 选出最佳结果
+5. 写一封邮件
+6. 发送邮件（假设已有权限）
+
+自主规划并执行多步骤任务，直到完成目标。
+
+</Tab>
+</Tabs>
+
+## 核心循环原理
+
+Agent 并不是什么魔法。它通常就是这样的代码：
+
+<Accordions>
+<Accordion title="查看核心循环代码">
+
+```ts
+const goal = "Find the cheapest flight to Shanghai next Friday"
+
+interface AgentState {
+  goal: string
+  stepsTaken: Decision[]
+  knownInfo: Record<string, any>
+}
+
+const state: AgentState = {
+  goal,
+  stepsTaken: [],
+  knownInfo: {}
+}
+
+let done = false
+
+while (!done) {
+  const decision = llm.decide({
+    goal,
+    state,
+    availableTools: ["search_flights", "compare_prices", "send_email"]
+  })
+
+  if (decision.type === "tool_call") {
+    const result = callTool(decision.toolName, decision.args)
+    state.stepsTaken.push(decision)
+    state.knownInfo[decision.toolName] = result
+  } else if (decision.type === "final_answer") {
+    done = true
+    return decision.message
+  }
+}
+```
+
+</Accordion>
+</Accordions>
+
+这就是核心思想。
+
+## 工具与调用
+
+AI 模型并不直接"做"事情。你的程序会暴露一些工具，比如：
+
+```ts
+function searchDocs(query: string): any[] { ... }
+function createTicket(title: string, body: string): string { ... }
+function runSql(query: string): any[] { ... }
+function sendEmail(to: string, subject: string, body: string): void { ... }
+```
+
+然后，模型决定何时以及如何调用它们。
+
+## 一个完整的 Agent 有哪些组成部分？
+
+一个实际的 agent 通常包含以下组成部分：
+
+1. **目标** — agent 要完成什么任务？
+2. **工具** — 它被允许执行哪些操作？
+3. **指令** — 它应该如何行动？应该避免什么？
+4. **记忆 / 状态** — 目前发生了什么？
+5. **控制循环** — 它应该继续、停止、重试、请求帮助，还是调用另一个工具？
+6. **安全护栏** — 什么操作需要确认？什么是禁止的？什么需要验证？
+
+<Callout title="关键" type="info">
+
+模型处于一个**反馈循环**之中。它做出决策，获得新信息，然后再做决策。
+
+</Callout>
+
+## 极简 Agent 实战
+
+一个极简的 agent 可能是这样：
+
+<Accordions>
+<Accordion title="查看完整代码">
+
+```ts
+const tools: Record<string, Function> = {
+  search_docs: searchDocs,
+  create_ticket: createTicket,
+}
+
+interface Message {
+  role: "system" | "user" | "tool" | "assistant"
+  content: string
+  name?: string
+}
+
+const messages: Message[] = [
+  {
+    role: "system",
+    content: `
+      你是一个技术支持工程师 agent。
+      你的工作是通过搜索文档来回答用户问题。
+      如果文档发现了产品 bug，就创建一个工单。
+      没有明确的证据时，不要创建工单。
+    `
+  },
+  {
+    role: "user",
+    content: "用户报告密码重置邮件一直没有收到。"
+  }
+]
+
+while (true) {
+  const response = callLLM(messages, { tools })
+
+  if (response.toolCall) {
+    const toolName = response.toolCall.name
+    const args = response.toolCall.args
+
+    const result = tools[toolName](...Object.values(args))
+
+    messages.push(response)
+    messages.push({
+      role: "tool",
+      name: toolName,
+      content: JSON.stringify(result)
+    })
+  } else {
+    console.log(response.content)
+    break
+  }
+}
+```
+
+</Accordion>
+</Accordions>
+
+## 脚本 vs Agent
+
+一种有用的思维方式：
+
+```text
+脚本遵循你预先写好的指令。
+agent 自己判断下一步该执行哪条指令。
+```
+
+但你仍然掌控边界。agent 不应该拥有无限自由。好的 agent 通常是有约束的：
+
+<Callout title="对比" type="warn">
+
+**糟糕的指令：**
+
+> "不惜一切代价修复生产环境问题。"
+
+**更好的指令：**
+
+> "你可以查看日志、查询指标、建议修复方案。未经审批，你不能部署代码或重启服务。"
+
+</Callout>
+
+## 如何开始构建 Agent
+
+想开始构建一个 agent，遵循以下步骤：
+
+<Steps>
+
+<Step>
+
+**选择一个简单而明确的目标。**
+
+不要试图让 agent 做所有事情。从单一、清晰的任务开始。
+
+</Step>
+
+<Step>
+
+**给 agent 2–5 个工具。**
+
+工具不要太多，否则 agent 会难以选择合适的工具。
+
+</Step>
+
+<Step>
+
+**在工具调用时维持状态。**
+
+记录每个步骤的结果，让 agent 有"记忆"。
+
+</Step>
+
+<Step>
+
+**让模型选择下一步行动。**
+
+不要硬编码流程，让 LLM 自主决定调用哪个工具。
+
+</Step>
+
+<Step>
+
+**当模型返回最终答案时停止。**
+
+设定清晰的终止条件。
+
+</Step>
+
+<Step>
+
+**对有风险的操作添加验证和权限检查。**
+
+这是安全护栏的关键部分。
+
+</Step>
+
+</Steps>
+
+## 结论
+
+一个真正实用的 AI agent，并非科幻世界里拥有自主意识的实体。它其实是一个围绕 LLM 构建的执行循环，赋予了模型调用外部函数来解决实际问题的能力。
+
