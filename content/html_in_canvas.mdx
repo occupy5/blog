@@ -4,68 +4,131 @@ date: 2026-04-26 12:00:21
 tags: ['前端']
 description: 'Web 提案：让 HTML 元素无缝融入 Canvas，兼具 DOM 语义排版与 Canvas 渲染控制力'
 ---
-**提案链接：** [HTML in Canvas](https://github.com/WICG/html-in-canvas)
+
+<Callout title="提案链接" type="info">
+
+[WICG/html-in-canvas](https://github.com/WICG/html-in-canvas)
+
+</Callout>
 
 ## 背景
+
 Web 开发者在处理 Canvas 内容时长期面临一个尴尬的现实：Canvas 擅长像素级操作，但对 HTML 的布局能力一无所知。这导致了几个核心问题：
 
-* **可访问性的缺失**：当你用 Canvas 绘制复杂的文本或 UI 时，屏幕阅读器可能无能为力。传统的 fallback 内容往往与实际渲染内容不同步，开发者需要手动维护两套内容。
-* **国际化噩梦**：Canvas 没有内置的文本排版引擎。从右到左（RTL）的文本、垂直书写模式、多语言混排、表情符号，这些在 HTML 中现成的功能在 Canvas 里都需要从零实现。
-* **性能与质量的权衡**：许多应用选择用 Canvas 渲染 UI 以获得高性能，但不得不牺牲文本渲染的质量和交互性；或者用 DOM 渲染获得完美体验，但付出性能代价。
-* **无法组合现代 Web 技术**：你想在 WebGL 场景中显示精美的 HTML UI？想在 3D 立方体上贴上动态的 HTML 内容？现有的组合方式要么性能低下，要么实现极其复杂。
-* **媒体导出困难**：想将网页中的某个 HTML 区域导出为图片或视频？没有标准 API，开发者只能依赖各种 hack 或第三方库。
+<Steps>
+
+<Step>
+
+**可访问性的缺失**
+
+当你用 Canvas 绘制复杂的文本或 UI 时，屏幕阅读器可能无能为力。传统的 fallback 内容往往与实际渲染内容不同步，开发者需要手动维护两套内容。
+
+</Step>
+
+<Step>
+
+**国际化噩梦**
+
+Canvas 没有内置的文本排版引擎。从右到左（RTL）的文本、垂直书写模式、多语言混排、表情符号，这些在 HTML 中现成的功能在 Canvas 里都需要从零实现。
+
+</Step>
+
+<Step>
+
+**性能与质量的权衡**
+
+许多应用选择用 Canvas 渲染 UI 以获得高性能，但不得不牺牲文本渲染的质量和交互性；或者用 DOM 渲染获得完美体验，但付出性能代价。
+
+</Step>
+
+<Step>
+
+**无法组合现代 Web 技术**
+
+你想在 WebGL 场景中显示精美的 HTML UI？想在 3D 立方体上贴上动态的 HTML 内容？现有的组合方式要么性能低下，要么实现极其复杂。
+
+</Step>
+
+<Step>
+
+**媒体导出困难**
+
+想将网页中的某个 HTML 区域导出为图片或视频？没有标准 API，开发者只能依赖各种 hack 或第三方库。
+
+</Step>
+
+</Steps>
 
 ## 核心提案介绍
+
 为了解决上述问题，社区提出了 HTML-in-Canvas 提案。它通过三个核心原语——`layoutsubtree` 属性、`drawElementImage` 方法和 `paint` 事件——**让 HTML 元素可以无缝地渲染到 2D 或 3D Canvas 中，同时保留其完整的语义和交互能力。**
 
 核心思想是：**让浏览器同时处理 HTML 布局和 Canvas 渲染，并保持两者同步**。
 
 ## Demo 与使用场景
+
 你可以通过以下 Demo 直观感受它的能力：
-* [Arrival Space](https://arrival.space/htmlcanvas)
-* [html-in-canvas-cracks](https://felixturner.github.io/html-in-canvas-cracks/)
 
-**使用场景：**
-### 1. **图表与数据可视化**
-现在你可以直接用 HTML 编写这些元素，利用完整的 CSS 样式和排版能力，然后将其绘制到 Canvas 中。
+- [Arrival Space](https://arrival.space/htmlcanvas)
+- [html-in-canvas-cracks](https://felixturner.github.io/html-in-canvas-cracks/)
 
-### 2. **游戏与创意工具的 UI**
-游戏开发者经常需要在 Canvas 中构建复杂的界面——装备面板、技能树、聊天窗口。用 HTML 构建这些 UI 既快速又美观，还能获得原生的表单控件和输入体验。
+### 使用场景
 
-### 3. **3D 场景中的 2D 内容**
-WebGL 和 WebGPU 应用需要将文本、图标等 2D 元素贴到 3D 表面上。以前这需要将文本渲染为纹理，现在可以直接使用 HTML 元素，支持实时更新和动画。
-
-### 4. **国际化富文本编辑器**
-需要支持多语言、复杂文本布局的编辑器可以结合 Canvas 的高性能和 HTML 的排版能力。
-
-### 5. **高性能媒体导出**
-当你需要将网页内容导出为图片或视频时，`captureElementImage` API 可以捕获 HTML 元素的渲染快照，在 Worker 线程中进行处理，避免阻塞主线程。
-
-### 6. **WebGPU 高级效果**
-基于光线步进（ray-marching）的果冻滑块示例展示了如何将 HTML 文本集成到复杂的着色器效果中，这是传统方法无法实现的。
+<Cards>
+  <Card title="图表与数据可视化" icon={<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>}>
+    现在你可以直接用 HTML 编写这些元素，利用完整的 CSS 样式和排版能力，然后将其绘制到 Canvas 中。
+  </Card>
+  <Card title="游戏与创意工具的 UI" icon={<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>}>
+    游戏开发者经常需要在 Canvas 中构建复杂的界面——装备面板、技能树、聊天窗口。用 HTML 构建这些 UI 既快速又美观，还能获得原生的表单控件和输入体验。
+  </Card>
+  <Card title="3D 场景中的 2D 内容" icon={<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" x2="12" y1="22.08" y2="12"/></svg>}>
+    WebGL 和 WebGPU 应用需要将文本、图标等 2D 元素贴到 3D 表面上。以前这需要将文本渲染为纹理，现在可以直接使用 HTML 元素，支持实时更新和动画。
+  </Card>
+  <Card title="国际化富文本编辑器" icon={<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M17 20h.01"/><path d="M13 20h.01"/><path d="M18 6h.01"/><path d="M22 18h.01"/></svg>}>
+    需要支持多语言、复杂文本布局的编辑器可以结合 Canvas 的高性能和 HTML 的排版能力。
+  </Card>
+  <Card title="高性能媒体导出" icon={<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>}>
+    当你需要将网页内容导出为图片或视频时，`captureElementImage` API 可以捕获 HTML 元素的渲染快照，在 Worker 线程中进行处理，避免阻塞主线程。
+  </Card>
+  <Card title="WebGPU 高级效果" icon={<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 21a9 9 0 0 0 9-9 9 9 0 0 0-9-9 9 9 0 0 0-9 9 9 9 0 0 0 9 9z"/><path d="m9 15 3-3 3 3"/><path d="m9 9 3 3 3-3"/></svg>}>
+    基于光线步进（ray-marching）的果冻滑块示例展示了如何将 HTML 文本集成到复杂的着色器效果中，这是传统方法无法实现的。
+  </Card>
+</Cards>
 
 ## 工作原理与 API 设计
+
 这个提案遵循了渐进增强、上下文无关（支持 2D/WebGL/WebGPU）和事件驱动的原则。核心实现依赖以下几点：
 
-### 1) `layoutsubtree` 属性
+<Callout title="核心原理" type="success">
+
+HTML-in-Canvas 的核心设计：**保留完整的 DOM 布局和 CSS 样式，仅在渲染阶段将内容输出到 Canvas 上下文中。**
+
+</Callout>
+
+### `layoutsubtree` 属性
+
 ```html
 <canvas layoutsubtree>
   <div id="content">这是要绘制的 HTML 内容</div>
 </canvas>
 ```
-这个属性告诉浏览器：Canvas 的直接子元素应该参与正常的 DOM 布局流程（包括盒模型、点击测试等）。它们在视觉上是“隐藏”的，但布局信息会被保留。
 
-### 2) `drawElementImage` 方法与 DOM 同步
+这个属性告诉浏览器：Canvas 的直接子元素应该参与正常的 DOM 布局流程（包括盒模型、点击测试等）。它们在视觉上是"隐藏"的，但布局信息会被保留。
+
+### `drawElementImage` 方法与 DOM 同步
+
 ```javascript
 const ctx = canvas.getContext('2d');
 // 绘制元素并获取变换矩阵
 const transform = ctx.drawElementImage(element, x, y, width, height);
 // 同步 DOM 位置，确保点击测试和无障碍功能正常
-element.style.transform = transform.toString(); 
+element.style.transform = transform.toString();
 ```
+
 这个方法将元素绘制到 Canvas 中。关键点在于：元素的 CSS 样式会被完整保留，同时返回的变换矩阵可以直接用于同步 DOM 位置。
 
-### 3) `paint` 事件驱动
+### `paint` 事件驱动
+
 ```javascript
 canvas.onpaint = (event) => {
   // 当 Canvas 子元素的渲染发生变化时自动触发
@@ -75,25 +138,36 @@ canvas.onpaint = (event) => {
 canvas.requestPaint(); // 对于动画场景，可手动触发绘制
 ```
 
-### 4) WebGL / OffscreenCanvas 支持
-* **3D 场景**：可以通过 `gl.texElementImage2D` 将 HTML 内容直接渲染为纹理，映射到 3D 物体上。
-* **Worker 线程**：支持通过 `captureElementImage` 结合 `OffscreenCanvas` 在后台线程进行高性能渲染。
+### WebGL / OffscreenCanvas 支持
+
+- **3D 场景**：可以通过 `gl.texElementImage2D` 将 HTML 内容直接渲染为纹理，映射到 3D 物体上。
+- **Worker 线程**：支持通过 `captureElementImage` 结合 `OffscreenCanvas` 在后台线程进行高性能渲染。
 
 ## 当前存在的挑战
+
 尽管提案已在 Chromium 中实现（需通过 `chrome://flags/#canvas-draw-flag` 启用），但走向生产环境仍需解决以下问题：
 
-1.  **浏览器支持有限**：目前仅 Chromium 实验性支持，Firefox、Safari 尚未表态。
-2.  **性能考量未完全明确**：高帧率动画中频繁同步变换是否会导致抖动？复杂 DOM 树的捕获成本有多高？还需要更多基准测试。
-3.  **隐私与安全边界**：可能被用于“截屏”攻击，具体的安全模型仍在讨论中。
-4.  **复合层管理**：涉及复杂 CSS 效果（如混合模式）时，需要浏览器引擎更深度的集成。
-5.  **可访问性工具适配**：屏幕阅读器等辅助技术需要更新规范，以理解“元素同时在 DOM 和 Canvas 中”的状态。
+<Callout title="浏览器支持" type="warn">
+
+目前仅 Chromium 实验性支持，Firefox、Safari 尚未表态。
+
+</Callout>
+
+| 挑战 | 说明 |
+|---|---|
+| **性能考量未完全明确** | 高帧率动画中频繁同步变换是否会导致抖动？复杂 DOM 树的捕获成本有多高？还需要更多基准测试。 |
+| **隐私与安全边界** | 可能被用于"截屏"攻击，具体的安全模型仍在讨论中。 |
+| **复合层管理** | 涉及复杂 CSS 效果（如混合模式）时，需要浏览器引擎更深度的集成。 |
+| **可访问性工具适配** | 屏幕阅读器等辅助技术需要更新规范，以理解"元素同时在 DOM 和 Canvas 中"的状态。 |
 
 ## 总结
-HTML-in-Canvas 是一个有望改变 Web 图形开发范式的提案。它巧妙地解决了长期存在的“Canvas vs DOM”对立问题，让开发者可以“既要又要”——既享受 Canvas 的渲染控制力和性能，又保留 HTML 的语义、可访问性和排版能力。
+
+HTML-in-Canvas 是一个有望改变 Web 图形开发范式的提案。它巧妙地解决了长期存在的"Canvas vs DOM"对立问题，让开发者可以"既要又要"——既享受 Canvas 的渲染控制力和性能，又保留 HTML 的语义、可访问性和排版能力。
 
 这绝不是让 Canvas 重新实现 HTML，而是让两者无缝协作，其**组合性**的价值与 Web 的开放本质一脉相承。对于游戏引擎、图表库、创意编码工具等领域，这是一个值得密切关注的基础设施级方向。
 
----
-* 视频版本：【HTML in Canvas — 下一代 Web 图形开发范式？-哔哩哔哩】 [https://b23.tv/Js1KDKp](https://b23.tv/Js1KDKp)
+<Callout title="延伸阅读" type="info">
 
+**视频版本**：[HTML in Canvas — 下一代 Web 图形开发范式？](https://b23.tv/Js1KDKp)
 
+</Callout>
