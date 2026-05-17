@@ -1,10 +1,4 @@
-import { CodeBlock, Pre } from 'fumadocs-ui/components/codeblock';
-import {
-  ImageZoom,
-  type ImageZoomProps,
-} from 'fumadocs-ui/components/image-zoom';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
-import * as Twoslash from 'fumadocs-twoslash/ui';
 import {
   DocsBody as PostsBody,
   DocsDescription as PostsDescription,
@@ -12,7 +6,7 @@ import {
   DocsTitle as PostsTitle,
 } from 'fumadocs-ui/page';
 import type { Metadata } from 'next';
-import { Mermaid } from '@/components/mermaid';
+import { mdxComponents } from '@/components/mdx';
 import { notFound } from 'next/navigation';
 import { title as homeTitle } from '@/app/layout.config';
 import { PostJsonLd } from '@/components/json-ld';
@@ -66,25 +60,7 @@ const Page = async (props: PageProps<'/posts/[slug]'>) => {
         ))}
       </div>
       <PostsBody>
-        <MDX
-          components={{
-            ...defaultMdxComponents,
-            ...Twoslash,
-            Mermaid,
-            img: (props: ImageZoomProps) => <ImageZoom {...props} />,
-            pre: ({ ...props }) => (
-              <CodeBlock
-                {...props}
-                viewportProps={{
-                  className: 'max-h-fit',
-                }}
-              >
-                <Pre>{props.children}</Pre>
-              </CodeBlock>
-            ),
-            LinkPreview,
-          }}
-        />
+        <MDX components={mdxComponents} />
       </PostsBody>
       <PostJsonLd post={post} />
     </PostsPage>
