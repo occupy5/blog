@@ -1,24 +1,18 @@
-import { ImageResponse } from 'next/og';
 import type { NextRequest } from 'next/server';
+import { googleFonts } from 'takumi-js/helpers';
+import { ImageResponse } from 'takumi-js/response';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
-const loadGoogleFont = async (font: string, text: string) => {
-  const url = `https://fonts.googleapis.com/css2?family=${font}&text=${encodeURIComponent(text)}`;
-  const css = await (await fetch(url)).text();
-  const resource = css.match(
-    /src: url\((.+)\) format\('(opentype|truetype)'\)/,
-  );
-
-  if (resource) {
-    const response = await fetch(resource[1]);
-    if (response.status === 200) {
-      return await response.arrayBuffer();
-    }
-  }
-
-  throw new Error('failed to load font data');
-};
+const fonts = googleFonts({
+  families: [
+    {
+      name: 'Noto Sans SC',
+      weight: 600,
+    },
+  ],
+  timeout: 20_000,
+});
 
 export const GET = async (req: NextRequest) => {
   const searchParams = req.nextUrl.searchParams;
@@ -32,8 +26,10 @@ export const GET = async (req: NextRequest) => {
           display: 'flex',
           height: '100%',
           width: '100%',
+          fontFamily: 'Noto Sans SC',
           background: 'linear-gradient(to bottom, #5b90ff, #86e1fc)',
         }}
+        lang='zh-Hans'
       >
         <div
           style={{
@@ -66,13 +62,11 @@ export const GET = async (req: NextRequest) => {
       {
         width: 1200,
         height: 630,
-        fonts: [
-          {
-            name: 'notoSansSC',
-            data: await loadGoogleFont('Noto+Sans+SC', 'shenn.xyz'),
-            style: 'normal',
-          },
-        ],
+        fonts,
+        headers: {
+          'Cache-Control':
+            'public, max-age=86400, stale-while-revalidate=604800',
+        },
       },
     );
   }
@@ -83,8 +77,10 @@ export const GET = async (req: NextRequest) => {
         display: 'flex',
         height: '100%',
         width: '100%',
+        fontFamily: 'Noto Sans SC',
         background: 'linear-gradient(to bottom, #5b90ff, #86e1fc)',
       }}
+      lang='zh-Hans'
     >
       <div
         style={{
@@ -137,16 +133,10 @@ export const GET = async (req: NextRequest) => {
     {
       width: 1200,
       height: 630,
-      fonts: [
-        {
-          name: 'notoSansSC',
-          data: await loadGoogleFont(
-            'Noto+Sans+SC:wght@600',
-            `shenn.xyz${title}${description}`,
-          ),
-          style: 'normal',
-        },
-      ],
+      fonts,
+      headers: {
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+      },
     },
   );
 };

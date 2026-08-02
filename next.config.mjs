@@ -4,7 +4,7 @@ const withMDX = createMDX();
 
 /** @type {import('next').NextConfig} */
 const config = {
-  serverExternalPackages: ['typescript', 'twoslash'],
+  serverExternalPackages: ['typescript', 'twoslash', '@takumi-rs/core'],
   images: {
     remotePatterns: [
       {
