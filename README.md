@@ -38,3 +38,44 @@ bun install
 ```bash
 bun dev
 ```
+
+## 本地草稿
+
+未发布的文章放在 `drafts/`，该目录中的草稿会被 Git 忽略，不会进入正式文章列表、搜索、RSS 或 sitemap。
+
+草稿使用和正式文章相同的 frontmatter：
+
+```mdx
+---
+title: 草稿标题
+description: 草稿简介
+date: 2026-10-02
+tags: ['草稿']
+---
+```
+
+`description` 可以省略或留空，留空时按未填写处理。
+
+开发服务器启动后，通过 `/drafts/<文件名>` 预览，例如：
+
+```text
+http://localhost:3000/drafts/1001
+```
+
+草稿只在开发环境中扫描和预览，并带有禁止搜索引擎索引的 metadata。生产构建不会读取草稿，因此未完成的草稿不会影响构建。
+
+图片等资源请使用远程 URL 或 `public/` 下的站点绝对路径，例如 `![图片](/images/example.png)` 对应 `public/images/example.png`。发布命令会拒绝相对资源路径（如 `./diagram.png`）和相对模块引用，避免移动文章后路径失效；被拒绝的草稿会保留在原处。
+
+草稿预览不会抓取远程图片尺寸；正式文章仍会读取图片尺寸并使用 Next.js 图片优化。完成草稿后运行：
+
+```bash
+bun run publish:draft 1001
+```
+
+该命令会把 `drafts/1001.mdx` 移动到 `content/1001.mdx`。发布前再运行：
+
+```bash
+bun run test:drafts
+bun run check
+bun run build
+```

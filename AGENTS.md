@@ -12,7 +12,7 @@ bun install
 bun dev
 
 # Build for production
-bun build
+bun run build
 bun start
 ```
 
@@ -20,7 +20,7 @@ bun start
 
 ### Development
 - `bun dev` - Start dev server with hot reload
-- `bun build` - Build production bundle
+- `bun run build` - Build production bundle
 - `bun start` - Start production server
 
 ### Code Quality (Biome)
@@ -183,7 +183,7 @@ tags: ["tag1", "tag2"]  # optional array
 
 ## Testing & Quality
 
-- No automated tests configured
+- `bun run test:drafts` - Run draft publishing regression tests
 - Manual testing via `bun dev` and browser
 - Use `bun run check:fix` to catch issues before deployment
 
