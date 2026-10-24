@@ -33,23 +33,3 @@ const posts = getPosts();
 
 export const getPostsSortedByDate = () =>
   posts.toSorted((a, b) => b.data.date.getTime() - a.data.date.getTime());
-
-export const getTags = () => {
-  const tagSet = new Set<string>();
-
-  for (const post of posts) {
-    if (post.data.tags) {
-      for (const tag of post.data.tags) {
-        tagSet.add(tag);
-      }
-    }
-  }
-
-  return Array.from(tagSet).toSorted();
-};
-
-export const getPostsByTag = (tag: string) => {
-  return posts
-    .filter((post) => post.data.tags?.includes(tag))
-    .toSorted((a, b) => b.data.date.getTime() - a.data.date.getTime());
-};

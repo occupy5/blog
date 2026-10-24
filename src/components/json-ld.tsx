@@ -53,12 +53,6 @@ export const PostJsonLd = ({ post }: { post: Post }) => {
       {
         '@type': 'ListItem',
         position: 2,
-        name: `${homeTitle} | 文章列表`,
-        item: new URL('/list', baseUrl).href,
-      },
-      {
-        '@type': 'ListItem',
-        position: 3,
         name: post.data.title,
         item: url,
       },
@@ -68,49 +62,6 @@ export const PostJsonLd = ({ post }: { post: Post }) => {
   const graph: Graph = {
     '@context': 'https://schema.org',
     '@graph': [blogPosting, breadcrumbList],
-  };
-
-  return (
-    <script
-      type='application/ld+json'
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: The content is safely serialized using JSON.stringify
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(graph) }}
-    />
-  );
-};
-
-export const TagJsonLd = ({ tag }: { tag: string }) => {
-  const baseUrl = new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
-  ).href;
-
-  const breadcrumbList: BreadcrumbList = {
-    '@type': 'BreadcrumbList',
-    itemListElement: [
-      {
-        '@type': 'ListItem',
-        position: 1,
-        name: homeTitle,
-        item: baseUrl,
-      },
-      {
-        '@type': 'ListItem',
-        position: 2,
-        name: `${homeTitle} | 文章列表`,
-        item: new URL('/tags', baseUrl).href,
-      },
-      {
-        '@type': 'ListItem',
-        position: 3,
-        name: `${homeTitle} ${tag}`,
-        item: new URL(`/tags/${tag}`, baseUrl).href,
-      },
-    ],
-  };
-
-  const graph: Graph = {
-    '@context': 'https://schema.org',
-    '@graph': [breadcrumbList],
   };
 
   return (

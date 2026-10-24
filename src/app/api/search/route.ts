@@ -1,6 +1,6 @@
+import { createTokenizer } from '@orama/tokenizers/mandarin';
 import { createSearchAPI } from 'fumadocs-core/search/server';
 import { getPosts } from '@/lib/source';
-import { createTokenizer } from "@orama/tokenizers/mandarin";
 
 export const { GET } = createSearchAPI('advanced', {
   indexes: getPosts().map((post) => ({
@@ -9,5 +9,5 @@ export const { GET } = createSearchAPI('advanced', {
     id: post.url,
     url: post.url,
   })),
-  tokenizer: createTokenizer()
+  tokenizer: createTokenizer(),
 });

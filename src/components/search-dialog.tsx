@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { create } from "@orama/orama";
-import { createTokenizer } from "@orama/tokenizers/mandarin";
-import { useDocsSearch } from "fumadocs-core/search/client";
+import { create } from '@orama/orama';
+import { createTokenizer } from '@orama/tokenizers/mandarin';
+import { useDocsSearch } from 'fumadocs-core/search/client';
 import {
   SearchDialog,
   SearchDialogClose,
@@ -13,16 +13,16 @@ import {
   SearchDialogList,
   SearchDialogOverlay,
   type SharedProps,
-} from "fumadocs-ui/components/dialog/search";
-import { useCallback } from "react";
+} from 'fumadocs-ui/components/dialog/search';
+import { useCallback } from 'react';
 
 export default function DefaultSearchDialog(props: SharedProps) {
   const { search, setSearch, query } = useDocsSearch({
-    type: "static",
+    type: 'static',
     initOrama: useCallback(
       () =>
         create({
-          schema: { _: "string" },
+          schema: { _: 'string' },
           components: {
             tokenizer: createTokenizer(),
           },
@@ -45,7 +45,7 @@ export default function DefaultSearchDialog(props: SharedProps) {
           <SearchDialogInput />
           <SearchDialogClose />
         </SearchDialogHeader>
-        <SearchDialogList items={query.data !== "empty" ? query.data : null} />
+        <SearchDialogList items={query.data !== 'empty' ? query.data : null} />
       </SearchDialogContent>
     </SearchDialog>
   );

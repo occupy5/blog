@@ -14,6 +14,12 @@ const config = {
     ],
   },
   reactStrictMode: true,
+  async redirects() {
+    return [
+      { source: '/list', destination: '/', permanent: true },
+      { source: '/list/:page(\\d+)', destination: '/', permanent: true },
+    ];
+  },
 };
 
 export default withMDX(config);

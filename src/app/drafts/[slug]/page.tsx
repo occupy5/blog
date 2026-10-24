@@ -26,6 +26,9 @@ const Page = async (props: { params: Promise<{ slug: string }> }) => {
 
   return (
     <PostsPage
+      article={{
+        className: `px-6 pt-10 md:px-8 md:pt-16 ${draft.data.full ? '' : 'max-w-[820px]'}`,
+      }}
       toc={draft.data.toc}
       full={draft.data.full}
       tableOfContent={{
@@ -39,7 +42,7 @@ const Page = async (props: { params: Promise<{ slug: string }> }) => {
       </div>
       <PostsTitle>{draft.data.title}</PostsTitle>
       <PostsDescription>{draft.data.description}</PostsDescription>
-      <PostsBody>
+      <PostsBody className='post-content'>
         <MDX components={draftMdxComponents} />
       </PostsBody>
     </PostsPage>

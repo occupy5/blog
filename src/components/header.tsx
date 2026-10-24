@@ -1,151 +1,62 @@
+'use client';
+
 import Link from 'fumadocs-core/link';
+import { SearchToggle } from 'fumadocs-ui/components/layout/search-toggle';
 import { ThemeToggle } from 'fumadocs-ui/components/layout/theme-toggle';
-import { NavigationMenuList } from 'fumadocs-ui/components/ui/navigation-menu';
 import type { HomeLayoutProps } from 'fumadocs-ui/layouts/home';
-import {
-  NavbarLink,
-  NavbarMenu,
-  NavbarMenuContent,
-  NavbarMenuTrigger,
-} from 'fumadocs-ui/layouts/home/navbar';
 import type { LinkItemType } from 'fumadocs-ui/layouts/links';
-import { Menu as MenuIcon, X } from 'lucide-react';
-import { Menu, MenuContent, MenuLinkItem, MenuTrigger } from './menu';
-import { Navbar, NavbarMenuLink } from './navbar';
+import { usePathname } from 'next/navigation';
+import { Navbar } from './navbar';
 
 export const Header = ({
   nav = {},
   finalLinks,
-}: HomeLayoutProps & {
-  finalLinks: LinkItemType[];
-}) => {
-  const navItems = finalLinks.filter((item) =>
-    ['nav', 'all'].includes(item.on ?? 'all'),
-  );
-  const menuItems = finalLinks.filter((item) =>
-    ['menu', 'all'].includes(item.on ?? 'all'),
-  );
+}: HomeLayoutProps & { finalLinks: LinkItemType[] }) => {
+  const pathname = usePathname();
 
   return (
     <Navbar>
       <Link
         href={nav.url ?? '/'}
-        className='inline-flex items-center gap-2.5 font-semibold'
+        className='shrink-0 text-[15px] font-medium tracking-tight text-fd-foreground transition-colors duration-150 hover:text-fd-primary focus-visible:text-fd-primary'
       >
         {nav.title}
       </Link>
-      {nav.children}
-      <NavigationMenuList className='flex flex-row items-center gap-2 max-sm:hidden mx-4'>
-        {navItems
-          .filter((item) => !isSecondary(item))
-          .map((item, i) => (
-            <NavbarLinkItem
-              key={i.toString()}
-              item={item}
-              className='text-sm'
-            />
-          ))}
-      </NavigationMenuList>
-      <div className='flex flex-1 flex-row items-center justify-end lg:gap-1.5'>
-        <ThemeToggle className='max-lg:hidden' />
-        {navItems.filter(isSecondary).map((item, i) => (
-          <NavbarLinkItem
-            key={i.toString()}
-            item={item}
-            className='-me-1.5 max-lg:hidden'
-          />
-        ))}
-        <Menu className='lg:hidden'>
-          <MenuTrigger className='group -me-2'>
-            <MenuIcon className='size-5 group-data-[state=open]:hidden' />
-            <X className='size-5 hidden group-data-[state=open]:block' />
-          </MenuTrigger>
-          <MenuContent className='sm:flex-row sm:items-center sm:justify-end'>
-            {menuItems
-              .filter((item) => !isSecondary(item))
-              .map((item, i) => (
-                <MenuLinkItem
-                  key={i.toString()}
-                  item={item}
-                  className='sm:hidden'
-                />
-              ))}
-            <div className='-ms-1.5 flex flex-row items-center gap-1.5 max-sm:mt-2'>
-              {menuItems.filter(isSecondary).map((item, i) => (
-                <MenuLinkItem
-                  key={i.toString()}
-                  item={item}
-                  className='-me-1.5'
-                />
-              ))}
-              <div className='flex-1' />
-              <ThemeToggle />
-            </div>
-          </MenuContent>
-        </Menu>
+      <ul className='ms-auto flex items-center gap-1 sm:gap-3'>
+        {finalLinks.map((item, index) => {
+          if (item.type === 'custom')
+            return <li key={index.toString()}>{item.children}</li>;
+          if (item.type === 'menu') return null;
+          const active =
+            item.url === '/'
+              ? pathname === '/' || pathname.startsWith('/posts/')
+              : pathname === item.url || pathname.startsWith(`${item.url}/`);
+          const icon = item.type === 'icon';
+          return (
+            <li key={item.url} className={icon ? 'hidden sm:block' : undefined}>
+              <Link
+                href={item.url}
+                external={item.external}
+                aria-current={active ? 'page' : undefined}
+                aria-label={icon ? item.label : undefined}
+                className={`site-link inline-flex h-9 items-center justify-center rounded-md text-sm transition-colors duration-150 ${icon ? 'w-9 [&_svg]:size-4' : 'px-2 sm:px-3'}`}
+              >
+                {icon ? item.icon : item.text}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      <div className='ms-1 flex shrink-0 items-center gap-1 text-fd-muted-foreground sm:ms-3'>
+        <SearchToggle
+          hideIfDisabled
+          className='size-9 rounded-md hover:bg-fd-muted'
+        />
+        <ThemeToggle
+          aria-label='切换主题'
+          className='site-theme-toggle size-9 rounded-md hover:bg-fd-muted'
+        />
       </div>
     </Navbar>
-  );
-};
-
-const NavbarLinkItem = ({
-  item,
-  ...props
-}: {
-  item: LinkItemType;
-  className?: string;
-}) => {
-  if (item.type === 'custom') return <div {...props}>{item.children}</div>;
-
-  if (item.type === 'menu') {
-    const children = item.items.map((child, j) => {
-      if (child.type === 'custom')
-        return <div key={j.toString()}>{child.children}</div>;
-
-      const { banner, ...rest } = child.menu ?? {};
-
-      return (
-        <NavbarMenuLink key={j.toString()} href={child.url} {...rest}>
-          {banner ??
-            (child.icon ? (
-              <div className='w-fit rounded-md border bg-fd-muted p-1 [&_svg]:size-4'>
-                {child.icon}
-              </div>
-            ) : null)}
-          <p className='-mb-1 text-sm font-medium'>{child.text}</p>
-          {child.description ? (
-            <p className='text-[13px] text-fd-muted-foreground'>
-              {child.description}
-            </p>
-          ) : null}
-        </NavbarMenuLink>
-      );
-    });
-
-    return (
-      <NavbarMenu>
-        <NavbarMenuTrigger {...props}>
-          {item.url ? <Link href={item.url}>{item.text}</Link> : item.text}
-        </NavbarMenuTrigger>
-        <NavbarMenuContent>{children}</NavbarMenuContent>
-      </NavbarMenu>
-    );
-  }
-
-  return (
-    <NavbarLink
-      {...props}
-      item={item}
-      variant={item.type}
-      aria-label={item.type === 'icon' ? item.label : undefined}
-    >
-      {item.type === 'icon' ? item.icon : item.text}
-    </NavbarLink>
-  );
-};
-
-const isSecondary = (item: LinkItemType): boolean => {
-  return (
-    ('secondary' in item && item.secondary === true) || item.type === 'icon'
   );
 };

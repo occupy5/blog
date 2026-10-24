@@ -19,7 +19,7 @@ export const PostsLayout = ({
   const links = getLinks(props.links ?? [], props.githubUrl);
 
   const variables = cn(
-    '[--fd-nav-height:3.5rem] [--fd-tocnav-height:36px] xl:[--fd-toc-width:268px] xl:[--fd-tocnav-height:0px]',
+    '[--fd-nav-height:4rem] [--fd-tocnav-height:36px] xl:[--fd-toc-width:240px] xl:[--fd-tocnav-height:0px]',
   );
 
   const pageStyles: PageStyles = {
@@ -32,9 +32,10 @@ export const PostsLayout = ({
   return (
     <TreeContextProvider tree={props.tree}>
       <main
+        id='main-content'
         {...props.containerProps}
         className={cn(
-          'flex w-full flex-1 flex-row pt-(--fd-nav-height)',
+          'flex w-full flex-1 flex-row pt-(--fd-nav-height) pb-16',
           variables,
           props.containerProps?.className,
         )}

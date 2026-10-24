@@ -8,6 +8,7 @@ const Layout = ({ children }: LayoutProps<'/'>) => {
   return (
     <HomeLayout
       {...baseOptions}
+      className='pt-16'
       links={linkItems}
       nav={{
         component: (
@@ -18,7 +19,13 @@ const Layout = ({ children }: LayoutProps<'/'>) => {
         ),
       }}
     >
-      <main className='mx-4 my-12 lg:mx-auto lg:w-[992px]'>{children}</main>
+      <div
+        id='main-content'
+        tabIndex={-1}
+        className='mx-auto w-full max-w-[1088px] px-6 pb-24 pt-12 sm:px-10 sm:pb-32 sm:pt-20'
+      >
+        {children}
+      </div>
     </HomeLayout>
   );
 };

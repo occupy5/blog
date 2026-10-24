@@ -18,7 +18,7 @@ export const GET = () => {
   );
 
   const feed = new Feed({
-    title:'不求谌解',
+    title: '不求谌解',
     description: '💻 Web Dev / Creative 💗 ⚽ 🎧 🏓',
     id: baseUrl.href,
     copyright: 'shenn.xyz',
